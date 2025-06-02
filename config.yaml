@@ -1,29 +1,46 @@
-# Unified Configuration for Multiclass, Multilabel, and MLM Training
-# ====================================================================
-# Usage: 
-#   Multiclass: python unified_model.py --mode multiclass -c config.yaml
-#   Multilabel: python unified_model.py --mode multilabel -c config.yaml
-#   MLM:        python unified_model.py --mode mlm -c config.yaml
-# ====================================================================
+# Unified Configuration for All Training and Inference Modes
+# ===========================================================
+# This configuration file supports all modes:
+# Training:
+#   - multiclass: Single-label classification training
+#   - multilabel: Multi-label classification training
+#   - mlm: Masked Language Model pretraining
+# Inference:
+#   - multiclass-inference: Single-label classification inference
+#   - multilabel-inference: Multi-label classification inference
+#
+# Usage Examples:
+#   python unified_model.py --mode multiclass -c unified_config.yaml
+#   python unified_model.py --mode multilabel -c unified_config.yaml
+#   python unified_model.py --mode mlm -c unified_config.yaml
+#   python unified_model.py --mode multiclass-inference -c unified_config.yaml
+#   python unified_model.py --mode multilabel-inference -c unified_config.yaml
+# ===========================================================
 
-# Model configuration
+# ============================================================================
+# Model Configuration (Training Only)
+# ============================================================================
 model:
-  name: "bert-base-uncased"  # HuggingFace model to use
-  # Alternative models based on your needs:
-  # name: "distilbert-base-uncased"  # Faster, smaller (40% less params)
-  # name: "roberta-base"  # Often better performance, no NSP
-  # name: "albert-base-v2"  # Much smaller, parameter sharing
+  name: "bert-base-uncased"  # HuggingFace model for training
+  # Alternative models for different use cases:
+  # name: "distilbert-base-uncased"  # 40% smaller, 60% faster
+  # name: "roberta-base"  # Often better performance than BERT
+  # name: "albert-base-v2"  # Memory efficient with parameter sharing
   # name: "microsoft/deberta-v3-base"  # State-of-the-art performance
   # name: "google/electra-base-discriminator"  # Efficient pretraining
-  use_torch_compile: false  # Enable torch.compile (PyTorch 2.0+)
+  # name: "bert-base-multilingual-cased"  # For multilingual tasks
+  use_torch_compile: false  # Enable torch.compile optimization (PyTorch 2.0+)
 
-# Data configuration
+# ============================================================================
+# Data Configuration (Training Only)
+# ============================================================================
 data:
-  # Path to CSV file - expected formats:
-  # - Multiclass: columns [text_column, label_column]
-  # - Multilabel: columns [text_column, label1, label2, ...]
-  # - MLM: column [text_column]
-  path: "data/dataset.csv"
+  # Path to training data CSV file
+  # Expected formats by mode:
+  # - multiclass: columns [text_column, label_column]
+  # - multilabel: columns [text_column, label1, label2, ...]
+  # - mlm: column [text_column]
+  path: "data/train.csv"
   
   # Column containing text data
   text_column: "text"
@@ -36,19 +53,26 @@ data:
   random_state: 42  # Random seed for reproducible splits
   
   # Sequence length configuration
-  max_length: 512  # Maximum sequence length (or "auto" for MLM)
+  max_length: 512  # Maximum tokens (or "auto" for MLM to auto-calculate)
   length_percentile: 95  # Percentile for auto-calculating max_length
 
-# Training configuration
+# ============================================================================
+# Training Configuration
+# ============================================================================
 training:
-  # Batch sizes by mode (adjust based on GPU memory)
-  batch_size: 32  # Good for multiclass
-  # batch_size: 16  # Recommended for multilabel (more memory intensive)
-  # batch_size: 16  # Recommended for MLM
+  # Batch size (adjust based on GPU memory and mode)
+  batch_size: 32  # Good default for most cases
+  # Recommended batch sizes:
+  # - multiclass: 32-64 (depending on sequence length)
+  # - multilabel: 16-32 (more memory intensive)
+  # - mlm: 16-32 (depending on model size)
   
-  # Training epochs by mode
-  epochs: 10  # Good for classification
-  # epochs: 3  # Often sufficient for MLM pretraining
+  # Number of training epochs
+  epochs: 10  # Good for classification tasks
+  # Recommended epochs:
+  # - multiclass: 5-15 (depending on dataset size)
+  # - multilabel: 10-20 (may need more for convergence)
+  # - mlm: 1-5 (for domain adaptation)
   
   # Learning rate (typically 2e-5 to 5e-5 for BERT-like models)
   learning_rate: 5e-5
@@ -64,148 +88,171 @@ training:
   # Directory for checkpoints during training
   output_dir: "output"
 
-# MLM-specific configuration (only used in MLM mode)
+# ============================================================================
+# MLM-Specific Configuration (MLM Mode Only)
+# ============================================================================
 mlm:
-  mlm_probability: 0.15  # Probability of masking each token
-  do_whole_word_mask: true  # Mask whole words instead of subwords
-  train_test_split: 0.05  # Smaller validation set for MLM
+  mlm_probability: 0.15  # Probability of masking each token (standard is 15%)
+  do_whole_word_mask: true  # Mask whole words instead of subword tokens
+  train_test_split: 0.05  # Smaller validation set for MLM (5% is typical)
 
-# Tokenizer configuration
+# ============================================================================
+# Inference Configuration (Inference Modes Only)
+# ============================================================================
+inference:
+  # Input/output files for inference
+  input_file: "data/test.csv"  # CSV file with text to classify
+  output_file: "predictions.csv"  # Where to save predictions
+  
+  # Path to trained model directory (from training output)
+  model_path: "models/bert-base-uncased-multiclass-20240101_120000"
+  # model_path: "models/bert-base-uncased-multilabel-20240101_120000"
+  
+  # Column in input file containing text
+  text_column: "text"
+  
+  # Threshold for positive predictions (multilabel only)
+  threshold: 0.5  # Predictions >= threshold are positive
+  
+  # Inference settings
+  batch_size: 32  # Can be larger than training since no gradients
+  max_length: 512  # Should match training max_length
+  device: "cuda"  # Device to use: "cuda" or "cpu"
+  
+  # Optional: Override model's id2label mapping
+  # Useful if you need custom label names or order
+  # id2label:
+  #   '0': 'negative'
+  #   '1': 'neutral'
+  #   '2': 'positive'
+  
+  # For multilabel:
+  # id2label:
+  #   '0': 'technical'
+  #   '1': 'urgent'
+  #   '2': 'bug'
+  #   '3': 'feature_request'
+
+# ============================================================================
+# Tokenizer Configuration (Optional)
+# ============================================================================
 tokenizer:
   max_length: null  # Override max length for tokenization
   length_percentile: 95  # Override percentile calculation
 
-# MLflow experiment tracking configuration
+# ============================================================================
+# MLflow Experiment Tracking (Training Only)
+# ============================================================================
 mlflow:
   enabled: true  # Enable/disable MLflow tracking
-  experiment_name: "unified-transformer-experiments"  # Experiment name
-  tracking_uri: null  # MLflow server URI (null = local)
-  autostart: true  # Auto-start local MLflow server if needed
+  experiment_name: "unified-transformer-experiments"  # MLflow experiment name
+  tracking_uri: null  # MLflow server URI (null = local server)
+  autostart: true  # Auto-start local MLflow server if not running
   port: 5000  # Port for local MLflow server
   backend_store_uri: "./mlruns"  # Where to store MLflow data
   artifact_store: null  # Artifact storage location (null = default)
 
-# Logging configuration
+# ============================================================================
+# Logging Configuration
+# ============================================================================
 logging:
   level: "INFO"  # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
   file: null  # Log file path (null = console only)
-  # file: "training.log"  # Uncomment to enable file logging
+  # file: "logs/training.log"  # Enable file logging
 
-# Output configuration
+# ============================================================================
+# Output Configuration (Training Only)
+# ============================================================================
 output:
   dir: "models"  # Directory to save final trained models
 
-# Random seed for reproducibility
+# ============================================================================
+# Miscellaneous
+# ============================================================================
+# Random seed for reproducibility (training only)
 seed: 42
 
-inference:
-  input_file: "data/test.csv"
-  output_file: "predictions.csv"
-  model_path: "path/to/trained/model"
-  text_column: "text"
-  threshold: 0.5  # For multilabel only
-  batch_size: 32
-  max_length: 512
-  device: "cuda"  # or "cpu"
-  
-  # Optional: Override id2label mapping
-  id2label:
-    '0': 'CLASS_A'
-    '1': 'CLASS_B'
-
 # ============================================================================
-# Mode-Specific Recommendations and Examples
+# Example Configurations by Use Case
 # ============================================================================
 
-# MULTICLASS CLASSIFICATION
-# -------------------------
-# Expected data format:
-#   text,category
-#   "This product is amazing!",positive
-#   "Terrible experience.",negative
-#   "It's okay, nothing special.",neutral
-#
-# Recommended settings:
-# - batch_size: 32-64 (depending on sequence length)
-# - epochs: 5-15 (depending on dataset size)
-# - learning_rate: 3e-5 to 5e-5
-
-# MULTILABEL CLASSIFICATION
-# -------------------------
-# Expected data format:
-#   text,technical,urgent,bug,feature
-#   "Server crash in production",1,1,1,0
-#   "Add dark mode support",0,0,0,1
-#   "Database optimization needed",1,0,0,0
-#
-# Recommended settings:
-# - batch_size: 8-16 (more memory per sample)
-# - epochs: 10-20 (may need more for convergence)
-# - learning_rate: 2e-5 to 3e-5
-
-# MASKED LANGUAGE MODEL (MLM)
-# ---------------------------
-# Expected data format:
-#   text
-#   "This is a sample text for pretraining."
-#   "Another document with domain-specific content."
-#
-# Recommended settings:
-# - batch_size: 16-32
-# - epochs: 1-5 (depending on corpus size)
-# - learning_rate: 5e-5
-# - max_length: "auto" or 512
-
-# ============================================================================
-# Advanced Configuration Examples
-# ============================================================================
-
-# For Large Datasets / Limited Memory:
-# -------------------------------------
-# training:
-#   batch_size: 8
-#   gradient_accumulation_steps: 4  # Effective batch = 32
-#   gradient_checkpointing: true
-#   fp16: true
-#   max_length: 256  # Shorter sequences
-
-# For Best Performance (if resources allow):
-# ------------------------------------------
-# model:
-#   name: "microsoft/deberta-v3-large"
-# training:
-#   batch_size: 64
-#   epochs: 20
-#   learning_rate: 2e-5
-#   warmup_steps: 500
-#   weight_decay: 0.01
-
-# For Fast Inference (production):
-# --------------------------------
+# --- Sentiment Analysis (Multiclass) ---
 # model:
 #   name: "distilbert-base-uncased"
+# data:
+#   path: "data/sentiment_train.csv"
+#   text_column: "review"
+#   label_column: "sentiment"
 # training:
 #   batch_size: 64
-#   epochs: 15
+#   epochs: 10
 #   learning_rate: 3e-5
 
-# For Domain-Specific Pretraining:
-# --------------------------------
+# --- Document Tagging (Multilabel) ---
 # model:
-#   name: "bert-base-uncased"  # Start from general model
+#   name: "roberta-base"
+# data:
+#   path: "data/documents_train.csv"
+#   text_column: "content"
+# training:
+#   batch_size: 16
+#   epochs: 15
+#   learning_rate: 2e-5
+
+# --- Domain Adaptation (MLM) ---
+# model:
+#   name: "bert-base-uncased"
+# data:
+#   path: "data/domain_corpus.csv"
+#   text_column: "text"
+#   max_length: "auto"
+# training:
+#   batch_size: 32
+#   epochs: 3
+#   learning_rate: 5e-5
 # mlm:
 #   mlm_probability: 0.15
 #   do_whole_word_mask: true
-# training:
-#   epochs: 3-5  # Don't overtrain
-#   learning_rate: 2e-5  # Lower LR for fine-tuning
+
+# --- Inference Configuration ---
+# inference:
+#   input_file: "data/new_reviews.csv"
+#   output_file: "sentiment_predictions.csv"
+#   model_path: "models/distilbert-sentiment-20240101"
+#   text_column: "review"
+#   batch_size: 64
+#   device: "cuda"
 
 # ============================================================================
-# Command Line Override Examples
+# Performance Tuning Guide
 # ============================================================================
-# You can override any configuration from the command line:
-#
-# python unified_model.py --mode multiclass -c config.yaml --model roberta-base
-# python unified_model.py --mode mlm -c config.yaml --epochs 5 --batch-size 8
-# python unified_model.py --mode multilabel -c config.yaml --learning-rate 2e-5
-# python unified_model.py --mode multiclass -c config.yaml --no-mlflow --debug
+
+# For Limited GPU Memory:
+# -----------------------
+# - Reduce batch_size (try 8 or 16)
+# - Enable gradient_checkpointing: true
+# - Use fp16: true
+# - Consider using distilbert instead of bert
+# - Reduce max_length if possible
+
+# For Faster Training:
+# --------------------
+# - Increase batch_size if memory allows
+# - Use distilbert or albert models
+# - Enable fp16: true
+# - Set num_workers: 4 (if not causing issues)
+
+# For Better Accuracy:
+# --------------------
+# - Use larger models (roberta-large, deberta-v3-large)
+# - Increase epochs
+# - Try lower learning rates (2e-5 or 3e-5)
+# - Increase max_length if texts are long
+# - For multilabel: tune the threshold parameter
+
+# For Production Inference:
+# -------------------------
+# - Use distilbert for 2x faster inference
+# - Increase inference batch_size
+# - Consider quantization or ONNX conversion
+# - Use CPU if latency is not critical
