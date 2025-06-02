@@ -1,0 +1,211 @@
+# Unified Configuration for Multiclass, Multilabel, and MLM Training
+# ====================================================================
+# Usage: 
+#   Multiclass: python unified_model.py --mode multiclass -c config.yaml
+#   Multilabel: python unified_model.py --mode multilabel -c config.yaml
+#   MLM:        python unified_model.py --mode mlm -c config.yaml
+# ====================================================================
+
+# Model configuration
+model:
+  name: "bert-base-uncased"  # HuggingFace model to use
+  # Alternative models based on your needs:
+  # name: "distilbert-base-uncased"  # Faster, smaller (40% less params)
+  # name: "roberta-base"  # Often better performance, no NSP
+  # name: "albert-base-v2"  # Much smaller, parameter sharing
+  # name: "microsoft/deberta-v3-base"  # State-of-the-art performance
+  # name: "google/electra-base-discriminator"  # Efficient pretraining
+  use_torch_compile: false  # Enable torch.compile (PyTorch 2.0+)
+
+# Data configuration
+data:
+  # Path to CSV file - expected formats:
+  # - Multiclass: columns [text_column, label_column]
+  # - Multilabel: columns [text_column, label1, label2, ...]
+  # - MLM: column [text_column]
+  path: "data/dataset.csv"
+  
+  # Column containing text data
+  text_column: "text"
+  
+  # For multiclass mode only - column containing single label
+  label_column: "category"
+  
+  # Data splitting configuration
+  test_size: 0.2  # Validation split for classification modes
+  random_state: 42  # Random seed for reproducible splits
+  
+  # Sequence length configuration
+  max_length: 512  # Maximum sequence length (or "auto" for MLM)
+  length_percentile: 95  # Percentile for auto-calculating max_length
+
+# Training configuration
+training:
+  # Batch sizes by mode (adjust based on GPU memory)
+  batch_size: 32  # Good for multiclass
+  # batch_size: 16  # Recommended for multilabel (more memory intensive)
+  # batch_size: 16  # Recommended for MLM
+  
+  # Training epochs by mode
+  epochs: 10  # Good for classification
+  # epochs: 3  # Often sufficient for MLM pretraining
+  
+  # Learning rate (typically 2e-5 to 5e-5 for BERT-like models)
+  learning_rate: 5e-5
+  
+  # Validation split (used if test_size not specified)
+  val_split: 0.2
+  
+  # Performance optimizations
+  fp16: true  # Mixed precision training (faster, less memory)
+  gradient_checkpointing: true  # Trade compute for memory
+  num_workers: 0  # DataLoader workers (0 avoids multiprocessing issues)
+  
+  # Directory for checkpoints during training
+  output_dir: "output"
+
+# MLM-specific configuration (only used in MLM mode)
+mlm:
+  mlm_probability: 0.15  # Probability of masking each token
+  do_whole_word_mask: true  # Mask whole words instead of subwords
+  train_test_split: 0.05  # Smaller validation set for MLM
+
+# Tokenizer configuration
+tokenizer:
+  max_length: null  # Override max length for tokenization
+  length_percentile: 95  # Override percentile calculation
+
+# MLflow experiment tracking configuration
+mlflow:
+  enabled: true  # Enable/disable MLflow tracking
+  experiment_name: "unified-transformer-experiments"  # Experiment name
+  tracking_uri: null  # MLflow server URI (null = local)
+  autostart: true  # Auto-start local MLflow server if needed
+  port: 5000  # Port for local MLflow server
+  backend_store_uri: "./mlruns"  # Where to store MLflow data
+  artifact_store: null  # Artifact storage location (null = default)
+
+# Logging configuration
+logging:
+  level: "INFO"  # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  file: null  # Log file path (null = console only)
+  # file: "training.log"  # Uncomment to enable file logging
+
+# Output configuration
+output:
+  dir: "models"  # Directory to save final trained models
+
+# Random seed for reproducibility
+seed: 42
+
+inference:
+  input_file: "data/test.csv"
+  output_file: "predictions.csv"
+  model_path: "path/to/trained/model"
+  text_column: "text"
+  threshold: 0.5  # For multilabel only
+  batch_size: 32
+  max_length: 512
+  device: "cuda"  # or "cpu"
+  
+  # Optional: Override id2label mapping
+  id2label:
+    '0': 'CLASS_A'
+    '1': 'CLASS_B'
+
+# ============================================================================
+# Mode-Specific Recommendations and Examples
+# ============================================================================
+
+# MULTICLASS CLASSIFICATION
+# -------------------------
+# Expected data format:
+#   text,category
+#   "This product is amazing!",positive
+#   "Terrible experience.",negative
+#   "It's okay, nothing special.",neutral
+#
+# Recommended settings:
+# - batch_size: 32-64 (depending on sequence length)
+# - epochs: 5-15 (depending on dataset size)
+# - learning_rate: 3e-5 to 5e-5
+
+# MULTILABEL CLASSIFICATION
+# -------------------------
+# Expected data format:
+#   text,technical,urgent,bug,feature
+#   "Server crash in production",1,1,1,0
+#   "Add dark mode support",0,0,0,1
+#   "Database optimization needed",1,0,0,0
+#
+# Recommended settings:
+# - batch_size: 8-16 (more memory per sample)
+# - epochs: 10-20 (may need more for convergence)
+# - learning_rate: 2e-5 to 3e-5
+
+# MASKED LANGUAGE MODEL (MLM)
+# ---------------------------
+# Expected data format:
+#   text
+#   "This is a sample text for pretraining."
+#   "Another document with domain-specific content."
+#
+# Recommended settings:
+# - batch_size: 16-32
+# - epochs: 1-5 (depending on corpus size)
+# - learning_rate: 5e-5
+# - max_length: "auto" or 512
+
+# ============================================================================
+# Advanced Configuration Examples
+# ============================================================================
+
+# For Large Datasets / Limited Memory:
+# -------------------------------------
+# training:
+#   batch_size: 8
+#   gradient_accumulation_steps: 4  # Effective batch = 32
+#   gradient_checkpointing: true
+#   fp16: true
+#   max_length: 256  # Shorter sequences
+
+# For Best Performance (if resources allow):
+# ------------------------------------------
+# model:
+#   name: "microsoft/deberta-v3-large"
+# training:
+#   batch_size: 64
+#   epochs: 20
+#   learning_rate: 2e-5
+#   warmup_steps: 500
+#   weight_decay: 0.01
+
+# For Fast Inference (production):
+# --------------------------------
+# model:
+#   name: "distilbert-base-uncased"
+# training:
+#   batch_size: 64
+#   epochs: 15
+#   learning_rate: 3e-5
+
+# For Domain-Specific Pretraining:
+# --------------------------------
+# model:
+#   name: "bert-base-uncased"  # Start from general model
+# mlm:
+#   mlm_probability: 0.15
+#   do_whole_word_mask: true
+# training:
+#   epochs: 3-5  # Don't overtrain
+#   learning_rate: 2e-5  # Lower LR for fine-tuning
+
+# ============================================================================
+# Command Line Override Examples
+# ============================================================================
+# You can override any configuration from the command line:
+#
+# python unified_model.py --mode multiclass -c config.yaml --model roberta-base
+# python unified_model.py --mode mlm -c config.yaml --epochs 5 --batch-size 8
+# python unified_model.py --mode multilabel -c config.yaml --learning-rate 2e-5
+# python unified_model.py --mode multiclass -c config.yaml --no-mlflow --debug
